@@ -7,7 +7,7 @@ const mangayomiSources = [{
   "typeSource": "single",
   "isManga": false,
   "itemType": 1,
-  "version": "0.0.4",
+  "version": "0.0.5",
   "pkgPath": "anime/src/id/oploverz.js"
 }];
 
@@ -131,35 +131,58 @@ class DefaultExtension extends MProvider {
              link: url, status: 5, genre: [], episodes: episodes };
   }
 
-  // ---- Ambil m3u8 dari embed upbolt ----
+  // ---- Ambil m3u8 dari embed upbolt (meniru urutan browser: GET /e/kode lalu POST /dl) ----
+  parseCookies(h) {
+    const raw = h && (h["set-cookie"] || h["Set-Cookie"]);
+    if (!raw) return "";
+    return String(raw).split(/,(?=\s*[^;,=\s]+=)/)
+      .map(x => x.split(";")[0].trim()).filter(x => x.indexOf("=") > 0).join("; ");
+  }
+
   async resolveUpbolt(embedUrl) {
     const code = embedUrl.split("/").pop();
-    const res = await new Client().post("https://upbolt.to/dl",
-      { "Referer": embedUrl, "Origin": "https://upbolt.to" },
+    const client = new Client();
+    const accept = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+    const page = await client.get(embedUrl, { "Referer": this.source.baseUrl + "/", "Accept": accept });
+    if (page.statusCode && page.statusCode !== 200) {
+      throw new Error("upbolt /e/ HTTP " + page.statusCode);
+    }
+    const headers = { "Referer": embedUrl, "Origin": "https://upbolt.to", "Accept": accept };
+    const cookie = this.parseCookies(page.headers);
+    if (cookie) headers["Cookie"] = cookie;
+    const res = await client.post("https://upbolt.to/dl", headers,
       { op: "embed", file_code: code, auto: "1", referer: this.source.baseUrl + "/" });
+    if (res.statusCode && res.statusCode !== 200) {
+      throw new Error("upbolt /dl HTTP " + res.statusCode);
+    }
     const m = res.body.match(/https:\/\/[^"'\s\\]+\.m3u8[^"'\s\\]*/);
-    return m ? m[0].replace(/&amp;/g, "&") : null;
+    if (!m) throw new Error("m3u8 tidak ada di respons /dl (panjang " + res.body.length + ")");
+    return m[0].replace(/&amp;/g, "&");
   }
 
   async getVideoList(url) {
     const res = await new Client().get(url.replace(/\/$/, "") + "/__data.json", this.getHeaders());
+    if (res.statusCode && res.statusCode !== 200) throw new Error("oploverz __data.json HTTP " + res.statusCode);
     const json = JSON.parse(res.body);
     const streams = [];
     const seen = new Set();
     for (const n of json.nodes) {
       if (n && n.type === "data" && n.data) findStreams(unflatten(n.data), streams, seen);
     }
+    if (streams.length === 0) throw new Error("Tidak ada embed upbolt di __data.json");
+    const errors = [];
     const results = await Promise.all(streams.map(async s => {
       try {
         const m3u8 = await this.resolveUpbolt(s.url);
-        if (!m3u8) return null;
         return {
           url: m3u8, originalUrl: m3u8, quality: "Upbolt " + s.label,
           headers: { "Referer": "https://upbolt.to/", "Origin": "https://upbolt.to" }
         };
-      } catch (e) { return null; }
+      } catch (e) { errors.push(String(e && e.message ? e.message : e)); return null; }
     }));
-    return results.filter(v => v);
+    const videos = results.filter(v => v);
+    if (videos.length === 0) throw new Error(errors[0] || "Video kosong");
+    return videos;
   }
 
   getFilterList() { return []; }
