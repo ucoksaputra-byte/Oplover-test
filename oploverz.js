@@ -7,11 +7,9 @@ const mangayomiSources = [{
   "typeSource": "single",
   "isManga": false,
   "itemType": 1,
-  "version": "0.0.3",
+  "version": "0.0.4",
   "pkgPath": "anime/src/id/oploverz.js"
 }];
-
-const UA = "Mozilla/5.0 (Linux; Android 13; Mobile; rv:159.0) Gecko/159.0 Firefox/159.0";
 
 // ---- Pembongkar format "devalue" milik SvelteKit (__data.json) ----
 function unflatten(data) {
@@ -50,7 +48,7 @@ function findStreams(node, out, seen) {
 
 class DefaultExtension extends MProvider {
   getHeaders() {
-    return { "Referer": this.source.baseUrl + "/", "User-Agent": UA };
+    return { "Referer": this.source.baseUrl + "/" };
   }
 
   abs(href) {
@@ -137,7 +135,7 @@ class DefaultExtension extends MProvider {
   async resolveUpbolt(embedUrl) {
     const code = embedUrl.split("/").pop();
     const res = await new Client().post("https://upbolt.to/dl",
-      { "Referer": embedUrl, "Origin": "https://upbolt.to", "User-Agent": UA },
+      { "Referer": embedUrl, "Origin": "https://upbolt.to" },
       { op: "embed", file_code: code, auto: "1", referer: this.source.baseUrl + "/" });
     const m = res.body.match(/https:\/\/[^"'\s\\]+\.m3u8[^"'\s\\]*/);
     return m ? m[0].replace(/&amp;/g, "&") : null;
@@ -157,7 +155,7 @@ class DefaultExtension extends MProvider {
         if (!m3u8) return null;
         return {
           url: m3u8, originalUrl: m3u8, quality: "Upbolt " + s.label,
-          headers: { "Referer": "https://upbolt.to/", "Origin": "https://upbolt.to", "User-Agent": UA }
+          headers: { "Referer": "https://upbolt.to/", "Origin": "https://upbolt.to" }
         };
       } catch (e) { return null; }
     }));
