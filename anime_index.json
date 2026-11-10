@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Oploverz",
+    "id": 482915037,
+    "lang": "id",
+    "baseUrl": "https://oploverz.diy",
+    "apiUrl": "",
+    "iconUrl": "https://oploverz.diy/logo.png",
+    "typeSource": "single",
+    "itemType": 1,
+    "isManga": false,
+    "isNsfw": false,
+    "hasCloudflare": false,
+    "version": "0.0.1",
+    "dateFormat": "",
+    "dateFormatLocale": "",
+    "pkgPath": "anime/src/id/oploverz.js",
+    "sourceCodeUrl": "https://raw.githubusercontent.com/USERNAME/REPO/main/oploverz.js"
+  }
+]
