@@ -7,7 +7,7 @@ const mangayomiSources = [{
   "typeSource": "single",
   "isManga": false,
   "itemType": 1,
-  "version": "0.0.1",
+  "version": "0.0.3",
   "pkgPath": "anime/src/id/oploverz.js"
 }];
 
@@ -73,21 +73,36 @@ class DefaultExtension extends MProvider {
       const slug = link.split("/series/")[1];
       if (!slug || seen[link]) continue;
       const img = a.selectFirst("img");
-      const name = img ? (img.attr("alt") || "").trim() : "";
-      if (!name) continue;
+      let name = img ? (img.attr("alt") || "").trim() : "";
+      if (!name) {
+        name = slug.replace(/\/$/, "").split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+      }
+      const imageUrl = img ? (img.attr("src") || img.attr("data-src") || "") : "";
       seen[link] = true;
-      list.push({ name: name, link: link, imageUrl: img.attr("src") || "" });
+      list.push({ name: name, link: link, imageUrl: imageUrl });
     }
     return { list: list, hasNextPage: false };
   }
 
-  async getPopular(page) { return this.listFrom(this.source.baseUrl + "/series", false); }
+  async getPopular(page) {
+    const r = await this.listFrom(this.source.baseUrl + "/series", false);
+    if (r.list.length > 0) return r;
+    return this.listFrom(this.source.baseUrl, false);
+  }
   async getLatestUpdates(page) { return this.listFrom(this.source.baseUrl, true); }
 
   async search(query, page, filters) {
-    const all = await this.listFrom(this.source.baseUrl + "/series", false);
+    const a = await this.listFrom(this.source.baseUrl + "/series", false);
+    const b = await this.listFrom(this.source.baseUrl, true);
     const q = query.toLowerCase();
-    return { list: all.list.filter(x => x.name.toLowerCase().includes(q)), hasNextPage: false };
+    const seen = {};
+    const out = [];
+    for (const x of a.list.concat(b.list)) {
+      if (seen[x.link] || !x.name.toLowerCase().includes(q)) continue;
+      seen[x.link] = true;
+      out.push(x);
+    }
+    return { list: out, hasNextPage: false };
   }
 
   // ---- Detail + daftar episode ----
@@ -101,8 +116,8 @@ class DefaultExtension extends MProvider {
     try {
       const og = doc.selectFirst('meta[property="og:image"]');
       if (og) imageUrl = og.attr("content");
-      const ds = doc.selectFirst('meta[name="description"]');
-      if (ds) description = ds.attr("content");
+      const dsAll = doc.select('meta[name="description"]');
+      if (dsAll.length > 0) description = dsAll[dsAll.length - 1].attr("content");
     } catch (e) {}
     const seen = {};
     const episodes = [];
@@ -136,16 +151,17 @@ class DefaultExtension extends MProvider {
     for (const n of json.nodes) {
       if (n && n.type === "data" && n.data) findStreams(unflatten(n.data), streams, seen);
     }
-    const videos = [];
-    for (const s of streams) {
-      const m3u8 = await this.resolveUpbolt(s.url);
-      if (!m3u8) continue;
-      videos.push({
-        url: m3u8, originalUrl: m3u8, quality: "Upbolt " + s.label,
-        headers: { "Referer": "https://upbolt.to/", "Origin": "https://upbolt.to", "User-Agent": UA }
-      });
-    }
-    return videos;
+    const results = await Promise.all(streams.map(async s => {
+      try {
+        const m3u8 = await this.resolveUpbolt(s.url);
+        if (!m3u8) return null;
+        return {
+          url: m3u8, originalUrl: m3u8, quality: "Upbolt " + s.label,
+          headers: { "Referer": "https://upbolt.to/", "Origin": "https://upbolt.to", "User-Agent": UA }
+        };
+      } catch (e) { return null; }
+    }));
+    return results.filter(v => v);
   }
 
   getFilterList() { return []; }
